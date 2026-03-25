@@ -82,6 +82,113 @@ Add this line at the end:
   poetry run app-energy status
   ```
 
+## Examples
+
+### Collect Command Output
+
+```bash
+$ poetry run app-energy collect --output table --top 5
+```
+
+```
+                                   Top 5 Energy Consumers
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ App                      ┃ PID ┃  CPU (ms) ┃ Memory (MB) ┃ I/O (MB) ┃ Power (mW) ┃ Energy (mAh) ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ WindowServer             │ 396 │ 165080092 │       175.7 │      0.0 │   631550.0 │     701.7222 │
+│ dasd                     │ 375 │  53444698 │        24.7 │      0.0 │   203451.8 │     226.0575 │
+│ launchd                  │   1 │  42466961 │        20.2 │      0.0 │   161584.5 │     179.5384 │
+│ UserEventAgent           │ 582 │  38536355 │         7.9 │      0.0 │   146327.2 │     162.5857 │
+│ com.apple.DriverKit-App… │ 539 │  22487698 │        40.8 │      0.0 │    86746.2 │      96.3847 │
+└──────────────────────────┴─────┴───────────┴─────────────┴──────────┴────────────┴──────────────┘
+```
+
+### Check Power Metrics
+
+```bash
+$ sudo poetry run app-energy check-power
+```
+
+```
+Checking powermetrics availability and functionality...
+
+✓ powermetrics executable found at: /usr/bin/powermetrics
+
+Attempting to run powermetrics...
+
+✓ Ran successfully with sudo -n (no password prompt)
+
+Parsing power metrics...
+
+                    Power Metrics
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┓
+┃ Metric      ┃ Value                      ┃ Status ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━┩
+│ CPU Power   │ 710123.00 mW               │ ✓      │
+│ GPU Power   │ 34424.20 mW                │ ✓      │
+│ Total Power │ 744547.20 mW               │ ✓      │
+│ Timestamp   │ 2026-03-25T20:35:45.374555 │ ✓      │
+└─────────────┴────────────────────────────┴────────┘
+
+Diagnostics:
+
+✓ Power metrics working correctly!
+  Total system power: 744547.20 mW
+```
+
+### Report Command Output
+
+```bash
+$ poetry run app-energy report --hours 1 --top 5
+```
+
+```
+                    Energy Report (Last 1 hour(s))
+┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━┓
+┃ App                   ┃ Total Energy (mAh)┃ Avg Power (mW) ┃ Samples┃
+┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━┩
+│ WindowServer          │ 2104.1667         │   701650.0     │   18   │
+│ dasd                  │  678.1725         │   203450.0     │   18   │
+│ launchd               │  538.6152         │   161585.0     │   18   │
+│ UserEventAgent        │  487.7571         │   146327.0     │   18   │
+│ com.apple.DriverKit   │  289.1541         │    86746.0     │   18   │
+└───────────────────────┴───────────────────┴────────────────┴────────┘
+
+Total energy: 5098.8656 mAh
+Data points: 90
+```
+
+### Status Command Output
+
+```bash
+$ poetry run app-energy status
+```
+
+```
+              Monitoring Status
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Metric              ┃ Value               ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
+│ CSV Path            │ data/energy_log.csv │
+│ CSV Rows            │ 2847                │
+│ CSV Size            │ 4.28 MB             │
+│ Log Path            │ logs/daemon.log     │
+│ Collection Interval │ 60s                 │
+│ InfluxDB URL        │ http://localhost... │
+└─────────────────────┴─────────────────────┘
+```
+
+### Sample CSV Output
+
+```csv
+timestamp,app_name,pid,cpu_user_ms,cpu_system_ms,memory_rss_mb,memory_vms_mb,io_read_count,io_write_count,io_read_bytes,io_write_bytes,num_threads,num_fds,estimated_power_mw,estimated_energy_mah
+2026-03-25T20:24:06.771840,WindowServer,396,165080092,12345678,175.7,512.3,1024,2048,41943040,8388608,42,256,631550.0,701.7222
+2026-03-25T20:24:06.771840,dasd,375,53444698,4567890,24.7,128.5,512,1024,20971520,4194304,8,64,203451.8,226.0575
+2026-03-25T20:24:06.771840,launchd,1,42466961,3456789,20.2,96.8,256,512,10485760,2097152,6,48,161584.5,179.5384
+2026-03-25T20:24:06.771840,UserEventAgent,582,38536355,2345678,7.9,64.2,128,256,5242880,1048576,4,32,146327.2,162.5857
+2026-03-25T20:24:06.771840,com.apple.DriverKit-App,539,22487698,1234567,40.8,192.5,64,128,2621440,524288,12,96,86746.2,96.3847
+```
+
 ## Configuration
 
 Create a `.env` file in the project root (copy from `config/.env.example`):
