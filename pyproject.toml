@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "app-energy-monitor"
+version = "0.1.0"
+description = "Monitor energy consumption of individual applications on macOS"
+authors = ["Will Daniels <will@example.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{ include = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+psutil = "^5.9.0"
+influxdb-client = "^1.18.0"
+python-dotenv = "^1.0.0"
+click = "^8.1.0"
+rich = "^13.0.0"
+pandas = "^2.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+pytest-cov = "^4.0.0"
+
+[tool.poetry.scripts]
+app-energy = "src.cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

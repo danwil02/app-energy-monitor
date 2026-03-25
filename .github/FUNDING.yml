@@ -1,0 +1,29 @@
+# GitHub Sponsors configuration
+# This file enables the "Sponsor" button on the repository
+
+# GitHub Sponsors
+github: willdaniels
+
+# Ko-fi - popular for smaller donations and "buy me a coffee" style support
+ko_fi: willdaniels
+
+# Buy Me a Coffee - great for one-time donations
+buy_me_a_coffee: willdaniels
+
+# Patreon - for recurring monthly support
+patreon: willdaniels
+
+# Open Collective - good for funding open source projects
+# open_collective: willdaniels
+
+# Community bridge
+# community_bridge: willdaniels
+
+# LiberaPay - privacy-focused recurring payments
+# liberapay: willdaniels
+
+# OISF (Open Source Initiative Fund)
+# issuehunt: willdaniels
+
+# Polar.sh - for GitHub-native sponsorships
+# polar: willdaniels

@@ -1,0 +1,53 @@
+COMMUNITY LICENSE (MIT-based)
+=============================
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software with the following conditions:
+
+CONDITIONS:
+-----------
+
+1. PERSONAL AND NON-COMMERCIAL USE ONLY
+   The Software may be used, modified, and distributed WITHOUT RESTRICTION
+   for personal, educational, and non-commercial purposes only. This includes:
+
+   ✓ Allowed:
+     - Personal projects and experimentation
+     - Educational use in schools and universities
+     - Open source projects
+     - Non-commercial research
+     - Internal use within a company for infrastructure monitoring (not resale)
+
+   ✗ Not Allowed Without Commercial License:
+     - SaaS (Software as a Service) offerings
+     - Selling the software or derived products
+     - Incorporating into commercial products
+     - Government or military use
+     - Any revenue-generating use
+     - Commercial support or consulting based on this software
+
+2. ATTRIBUTION
+   The above copyright notice and this license notice shall be included in all
+   copies or substantial portions of the Software.
+
+3. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+4. COMMERCIAL USE
+   For commercial or military use, you must obtain a separate Commercial License.
+   Please contact the author for licensing terms.
+
+=============================
+
+For commercial licensing inquiries, please contact:
+Email: danwil02@hotmail.com
+
+The latest version of this license is available at:
+https://github.com/willdaniels/app-energy-monitor
