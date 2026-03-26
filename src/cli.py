@@ -252,6 +252,10 @@ def report(hours: float, top: int):
     import pandas as pd
 
     try:
+        # Get battery capacity for percentage calculation
+        estimator = EnergyEstimator()
+        battery_mah = estimator.battery_mah
+
         # Read CSV
         df = pd.read_csv(CSV_PATH)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -268,9 +272,10 @@ def report(hours: float, top: int):
         app_energy = df.groupby('app_name')['estimated_energy_mah'].sum().sort_values(ascending=False)
 
         # Display table
-        table = Table(title=f"Energy Report (Last {hours} hour(s))")
+        table = Table(title=f"Energy Report (Last {hours} hour(s)) - Battery: {estimator.battery_wh}Wh")
         table.add_column("App", style="cyan")
-        table.add_column("Total Energy (mAh)", justify="right", style="red")
+        table.add_column("Energy (mAh)", justify="right", style="red")
+        table.add_column("Battery %", justify="right", style="green")
         table.add_column("Avg Power (mW)", justify="right", style="yellow")
         table.add_column("Samples", justify="right", style="magenta")
 
@@ -278,10 +283,12 @@ def report(hours: float, top: int):
             app_samples = df[df['app_name'] == app_name]
             avg_power = app_samples['estimated_power_mw'].mean()
             num_samples = len(app_samples)
+            battery_pct = (energy / battery_mah) * 100
 
             table.add_row(
                 app_name[:30],
                 f"{energy:.4f}",
+                f"{battery_pct:.3f}%",
                 f"{avg_power:.1f}",
                 str(num_samples)
             )
@@ -290,7 +297,8 @@ def report(hours: float, top: int):
 
         # Summary stats
         total_energy = app_energy.sum()
-        console.print(f"\n[dim]Total energy: {total_energy:.4f} mAh[/dim]")
+        total_battery_pct = (total_energy / battery_mah) * 100
+        console.print(f"\n[dim]Total energy: {total_energy:.4f} mAh ({total_battery_pct:.2f}% of battery)[/dim]")
         console.print(f"[dim]Data points: {len(df)}[/dim]")
 
     except ImportError:
