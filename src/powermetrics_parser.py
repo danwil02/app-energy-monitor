@@ -117,16 +117,17 @@ class PowermetricsParser:
 
                     if isinstance(plist_dict, dict):
                         # Direct key lookup for cpu_power and gpu_power (case-insensitive)
+                        # Note: powermetrics returns values already in milliwatts
                         for key in plist_dict:
                             key_lower = key.lower() if isinstance(key, str) else ""
                             if key_lower == 'cpu_power':
                                 val = plist_dict[key]
                                 if isinstance(val, (int, float)):
-                                    cpu_power_mw = float(val) * 1000
+                                    cpu_power_mw = float(val)
                             elif key_lower == 'gpu_power':
                                 val = plist_dict[key]
                                 if isinstance(val, (int, float)):
-                                    gpu_power_mw = float(val) * 1000
+                                    gpu_power_mw = float(val)
             except Exception as e:
                 logger.debug(f"plistlib parsing failed: {e}, trying regex parsing")
         except ImportError:
@@ -134,24 +135,25 @@ class PowermetricsParser:
 
         # Fallback: regex-based XML parsing for patterns
         # This catches cases like: <key>cpu_power</key><real>1188.52</real>
+        # Note: powermetrics returns values already in milliwatts
         if cpu_power_mw == 0.0 or gpu_power_mw == 0.0:
             try:
                 import re
                 # Look for cpu_power key with real value
                 cpu_match = re.search(r'<key>cpu_power</key>\s*<real>([\d.]+)</real>', plist_text, re.IGNORECASE)
                 if cpu_match:
-                    cpu_power_mw = float(cpu_match.group(1)) * 1000
+                    cpu_power_mw = float(cpu_match.group(1))
 
                 # Look for gpu_power key with real value
                 gpu_match = re.search(r'<key>gpu_power</key>\s*<real>([\d.]+)</real>', plist_text, re.IGNORECASE)
                 if gpu_match:
-                    gpu_power_mw = float(gpu_match.group(1)) * 1000
+                    gpu_power_mw = float(gpu_match.group(1))
 
                 # Fallback: if individual values not found, try combined_power
                 if cpu_power_mw == 0.0 and gpu_power_mw == 0.0:
                     combined_match = re.search(r'<key>combined_power</key>\s*<real>([\d.]+)</real>', plist_text, re.IGNORECASE)
                     if combined_match:
-                        cpu_power_mw = float(combined_match.group(1)) * 1000
+                        cpu_power_mw = float(combined_match.group(1))
             except Exception as e:
                 logger.debug(f"Regex parsing failed: {e}")
 

@@ -70,6 +70,8 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path):
         app_blacklist=APP_BLACKLIST
     )
     estimator = EnergyEstimator()
+    logger.info(f"Hardware model: {estimator.hw_model}")
+    logger.info(f"Battery capacity: {estimator.battery_wh}Wh ({estimator.battery_mah:.0f}mAh)")
 
     csv_writer = None
     influxdb_writer = None
@@ -178,6 +180,8 @@ def collect(output: str, top: int):
 
     with console.status("[cyan]Estimating energy...", spinner="dots"):
         estimator = EnergyEstimator(system_power_sample=power_sample)
+        logger.debug(f"Hardware model: {estimator.hw_model}")
+        logger.debug(f"Battery capacity: {estimator.battery_wh}Wh ({estimator.battery_mah:.0f}mAh)")
         estimated_metrics = estimator.estimate_energy(metrics, interval_seconds=60)
 
     # Get top consumers
