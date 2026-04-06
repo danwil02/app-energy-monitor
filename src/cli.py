@@ -10,6 +10,7 @@ from datetime import datetime
 from rich.table import Table
 from rich.console import Console
 from rich.syntax import Syntax
+from rich.live import Live
 from typing import Optional
 
 from .config import (
@@ -22,6 +23,7 @@ from .powermetrics_parser import PowermetricsParser
 from .csv_writer import CSVWriter
 from .storage import InfluxDBWriter
 from .logger import get_logger, set_log_file
+from .live_dashboard import LiveDashboard
 
 console = Console()
 
@@ -51,11 +53,16 @@ def main():
               help='Output destination')
 @click.option('--log-file', default=LOG_PATH,
               help='Path to daemon log file')
-def daemon(interval: int, duration: Optional[int], output: str, log_file: Path):
+@click.option('--live', is_flag=True,
+              help='Show real-time live dashboard')
+def daemon(interval: int, duration: Optional[int], output: str, log_file: Path, live: bool):
     """Run as background daemon, continuously monitoring energy usage.
 
     For accurate power measurements, run with sudo:
         sudo poetry run app-energy daemon --interval 60 --output both
+
+    For live dashboard:
+        sudo poetry run app-energy daemon --live --interval 60
     """
 
     set_log_file(Path(log_file))
@@ -63,6 +70,8 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path):
 
     logger.info(f"Starting energy monitor daemon (interval: {interval}s)")
     logger.info(f"Output: {output}")
+    if live:
+        logger.info("Live dashboard enabled")
 
     # Initialize collectors and writers
     collector = MetricsCollector(
@@ -75,6 +84,7 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path):
 
     csv_writer = None
     influxdb_writer = None
+    dashboard = None
 
     if output in ['csv', 'both']:
         csv_writer = CSVWriter(csv_path=CSV_PATH)
@@ -91,8 +101,18 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path):
         else:
             logger.warning("InfluxDB token not configured, skipping InfluxDB output")
 
+    if live:
+        dashboard = LiveDashboard(
+            csv_path=CSV_PATH,
+            battery_wh=estimator.battery_wh,
+            battery_mah=estimator.battery_mah,
+            console=console
+        )
+
     def signal_handler(sig, frame):
         logger.info("Received interrupt signal, shutting down...")
+        if dashboard:
+            dashboard = None  # This will trigger live display cleanup
         if influxdb_writer:
             influxdb_writer.close()
         sys.exit(0)
@@ -103,20 +123,41 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path):
     start_time = time.time()
     sample_count = 0
 
+    # Setup live display context if needed
+    live_context = None
+    if dashboard:
+        live_context = Live(dashboard.render(), console=console, refresh_per_second=1)
+        live_context.__enter__()
+
     try:
         while True:
             sample_time = datetime.now()
 
-            # Collect metrics
-            with console.status("[cyan]Collecting metrics...", spinner="dots"):
+            # Collect metrics (use spinners only if not in live mode)
+            if not dashboard:
+                with console.status("[cyan]Collecting metrics...", spinner="dots"):
+                    metrics = collector.collect_all()
+            else:
+                logger.info("Collecting metrics...")
                 metrics = collector.collect_all()
 
             # Get system power
-            power_sample = PowermetricsParser.get_system_power()
+            if not dashboard:
+                with console.status("[cyan]Getting power metrics...", spinner="dots"):
+                    power_sample = PowermetricsParser.get_system_power()
+            else:
+                logger.info("Getting power metrics...")
+                power_sample = PowermetricsParser.get_system_power()
 
             # Estimate energy
-            estimator_instance = EnergyEstimator(system_power_sample=power_sample)
-            estimated_metrics = estimator_instance.estimate_energy(metrics, interval)
+            if not dashboard:
+                with console.status("[cyan]Estimating energy...", spinner="dots"):
+                    estimator_instance = EnergyEstimator(system_power_sample=power_sample)
+                    estimated_metrics = estimator_instance.estimate_energy(metrics, interval)
+            else:
+                logger.info("Estimating energy...")
+                estimator_instance = EnergyEstimator(system_power_sample=power_sample)
+                estimated_metrics = estimator_instance.estimate_energy(metrics, interval)
 
             # Write to CSV
             if csv_writer:
@@ -135,6 +176,12 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path):
             # Log summary
             logger.info(f"Sample #{sample_count}: collected {len(metrics)} apps")
 
+            # Update dashboard if enabled
+            if dashboard:
+                dashboard.update(estimated_metrics, power_sample, sample_count)
+                dashboard.add_log(f"Sample #{sample_count}: {len(metrics)} apps")
+                live_context.update(dashboard.render())
+
             # Calculate elapsed time
             elapsed = time.time() - start_time
             if duration and elapsed >= duration * 60:
@@ -148,6 +195,8 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path):
         logger.error(f"Daemon error: {e}")
         raise
     finally:
+        if live_context:
+            live_context.__exit__(None, None, None)
         if influxdb_writer:
             influxdb_writer.close()
         logger.info("Daemon stopped")
