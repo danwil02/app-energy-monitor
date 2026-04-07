@@ -5,13 +5,15 @@ import time
 import signal
 import sys
 import subprocess
+import threading
+import select
 from pathlib import Path
 from datetime import datetime
 from rich.table import Table
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.live import Live
-from typing import Optional
+from typing import Optional, Callable
 
 from .config import (
     INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN,
@@ -35,6 +37,92 @@ def format_bytes(bytes_val: int) -> str:
             return f"{bytes_val:.1f}{unit}"
         bytes_val /= 1024
     return f"{bytes_val:.1f}TB"
+
+
+class KeyboardInputHandler:
+    """Handle keyboard input in terminal without blocking main loop.
+
+    Uses select() to check for input availability without changing terminal modes,
+    avoiding conflicts with Rich's Live display terminal management.
+    """
+
+    def __init__(self, on_left: Callable = None, on_right: Callable = None):
+        """Initialize keyboard handler.
+
+        Args:
+            on_left: Callback for left arrow key
+            on_right: Callback for right arrow key
+        """
+        self.on_left = on_left
+        self.on_right = on_right
+        self.thread = None
+        self.running = False
+        self.logger = get_logger()
+
+    def start(self):
+        """Start keyboard input handler in background thread."""
+        if self.running:
+            return
+
+        self.running = True
+        self.thread = threading.Thread(target=self._input_loop, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        """Stop keyboard input handler."""
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=1)
+
+    def _input_loop(self):
+        """Main input handling loop (runs in thread).
+
+        Uses select() to check if input is available without changing terminal modes.
+        This is safer and doesn't interfere with Rich's Live display.
+        """
+        try:
+            while self.running:
+                try:
+                    # Use select to check if input is available (non-blocking)
+                    # Timeout of 0.5 seconds allows for frequent checks while avoiding busy-waiting
+                    ready = select.select([sys.stdin], [], [], 0.5)
+
+                    if ready[0]:
+                        # Try to read the next character
+                        ch = sys.stdin.read(1)
+
+                        if not ch:  # EOF
+                            continue
+
+                        if ch == '\x1b':  # Escape character (start of escape sequence)
+                            # Try to read the rest of the escape sequence
+                            # Arrow keys are: ESC [ A (up), ESC [ B (down), ESC [ C (right), ESC [ D (left)
+                            ch2_ready = select.select([sys.stdin], [], [], 0.05)
+                            if ch2_ready[0]:
+                                ch2 = sys.stdin.read(1)
+                                if ch2 == '[':
+                                    ch3_ready = select.select([sys.stdin], [], [], 0.05)
+                                    if ch3_ready[0]:
+                                        ch3 = sys.stdin.read(1)
+                                        if ch3 == 'C' and self.on_right:
+                                            # Right arrow detected
+                                            self.logger.debug("Right arrow key detected")
+                                            self.on_right()
+                                        elif ch3 == 'D' and self.on_left:
+                                            # Left arrow detected
+                                            self.logger.debug("Left arrow key detected")
+                                            self.on_left()
+                except EOFError:
+                    # stdin was closed
+                    self.logger.debug("stdin closed, stopping keyboard handler")
+                    break
+                except Exception as e:
+                    # Silently ignore read errors and continue
+                    self.logger.debug(f"Keyboard handler read error: {e}")
+                    pass
+        except Exception as e:
+            # Silently fail - input handler errors shouldn't break the daemon
+            self.logger.debug(f"Keyboard handler error: {e}")
 
 
 @click.group()
@@ -85,6 +173,8 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path, 
     csv_writer = None
     influxdb_writer = None
     dashboard = None
+    keyboard_handler = None
+    live_context = None
 
     if output in ['csv', 'both']:
         csv_writer = CSVWriter(csv_path=CSV_PATH)
@@ -108,13 +198,11 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path, 
             battery_mah=estimator.battery_mah,
             console=console
         )
+        logger.info("Use ← / → arrow keys to switch time windows")
 
     def signal_handler(sig, frame):
         logger.info("Received interrupt signal, shutting down...")
-        if dashboard:
-            dashboard = None  # This will trigger live display cleanup
-        if influxdb_writer:
-            influxdb_writer.close()
+        # Signal handler will exit - let finally block handle cleanup
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
@@ -124,8 +212,18 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path, 
     sample_count = 0
 
     # Setup live display context if needed
+    # NOTE: Keyboard input currently disabled due to conflicts with Rich's terminal control
+    #       when both try to manage stdin. This will be improved in a future update.
+    keyboard_handler = None
     live_context = None
     if dashboard:
+        # keyboard_handler = KeyboardInputHandler(
+        #     on_left=dashboard.prev_table,
+        #     on_right=dashboard.next_table
+        # )
+        # keyboard_handler.start()
+        # logger.info("Keyboard input handler started")
+
         live_context = Live(dashboard.render(), console=console, refresh_per_second=1)
         live_context.__enter__()
 
@@ -191,14 +289,29 @@ def daemon(interval: int, duration: Optional[int], output: str, log_file: Path, 
             # Sleep until next interval
             time.sleep(interval)
 
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received")
     except Exception as e:
         logger.error(f"Daemon error: {e}")
-        raise
     finally:
-        if live_context:
-            live_context.__exit__(None, None, None)
-        if influxdb_writer:
-            influxdb_writer.close()
+        try:
+            if keyboard_handler:
+                keyboard_handler.stop()
+        except Exception as e:
+            logger.debug(f"Error stopping keyboard handler: {e}")
+
+        try:
+            if live_context:
+                live_context.__exit__(None, None, None)
+        except Exception as e:
+            logger.debug(f"Error exiting live context: {e}")
+
+        try:
+            if influxdb_writer:
+                influxdb_writer.close()
+        except Exception as e:
+            logger.debug(f"Error closing InfluxDB writer: {e}")
+
         logger.info("Daemon stopped")
 
 

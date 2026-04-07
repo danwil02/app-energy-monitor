@@ -5,6 +5,7 @@ from collections import deque
 from typing import Optional, Dict, List
 from pathlib import Path
 import pandas as pd
+import subprocess
 
 from rich.console import Console
 from rich.table import Table
@@ -56,10 +57,70 @@ class LiveDashboard:
         # Live logs buffer
         self.logs = deque(maxlen=50)
 
+        # Battery info
+        self.battery_percent: Optional[float] = None
+        self.battery_time_remaining: Optional[str] = None
+        self._update_battery_info()
+
     def add_log(self, message: str):
         """Add a log message to the dashboard."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.logs.append(f"[{timestamp}] {message}")
+
+    def _update_battery_info(self):
+        """Update battery percentage and time remaining from pmset."""
+        try:
+            result = subprocess.run(
+                ['pmset', '-g', 'batt'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+
+            # Parse output like:
+            # -InternalBattery-0 (id=123); 62%; charging; 2:30 remaining
+            for line in result.stdout.split('\n'):
+                if '%' in line and 'Battery' not in line:
+                    # Extract percentage
+                    pct_idx = line.find('%')
+                    if pct_idx > 0:
+                        # Find the number before %
+                        start = pct_idx - 1
+                        while start >= 0 and (line[start].isdigit() or line[start] == '.'):
+                            start -= 1
+                        try:
+                            self.battery_percent = float(line[start+1:pct_idx])
+                        except ValueError:
+                            pass
+
+                    # Extract time remaining
+                    if 'remaining' in line:
+                        remaining_idx = line.find('remaining')
+                        time_start = line.rfind(';', 0, remaining_idx)
+                        if time_start >= 0:
+                            self.battery_time_remaining = line[time_start+1:remaining_idx].strip()
+        except Exception as e:
+            logger.debug(f"Failed to get battery info: {e}")
+
+    def _build_battery_indicator(self) -> str:
+        """Build a battery progress indicator.
+
+        Returns:
+            Formatted battery bar string
+        """
+        self._update_battery_info()  # Refresh battery info
+
+        if self.battery_percent is None:
+            return "Battery: ?"
+
+        # Create a simple bar: █ for filled, ░ for empty
+        bar_width = 10
+        filled = int(self.battery_percent / 100 * bar_width)
+        empty = bar_width - filled
+        bar = '█' * filled + '░' * empty
+
+        time_str = f" ({self.battery_time_remaining})" if self.battery_time_remaining else ""
+        return f"Battery: {bar} {self.battery_percent:.0f}%{time_str}"
 
     def update(self, metrics: List[ProcessMetric], power_sample: Optional[SystemPowerSample],
                sample_count: int):
@@ -141,19 +202,31 @@ class LiveDashboard:
         if not sorted_apps:
             return Panel("No app data", title="Top Energy Consumers")
 
-        # Build text with ASCII bars
-        content = []
+        # Build text with prettier ASCII bars and color coding
+        from rich.text import Text as RichText
+        content = RichText()
         max_power = sorted_apps[0][1]
 
-        for app_name, power in sorted_apps:
-            bar_width = int((power / max_power) * 40) if max_power > 0 else 0
-            bar = "█" * bar_width
-            power_mw = f"{power:.1f}mW"
-            line = f"{app_name[:25]:25s} {bar:40s} {power_mw:>8s}"
-            content.append(line)
+        for i, (app_name, power) in enumerate(sorted_apps):
+            bar_width = int((power / max_power) * 35) if max_power > 0 else 0
 
-        content_text = "\n".join(content)
-        return Panel(content_text, title="Top Energy Consumers (Current)", expand=False)
+            # Color code based on power level
+            if power > max_power * 0.7:
+                bar_char = "█"
+                bar_color = "red"
+            elif power > max_power * 0.4:
+                bar_char = "█"
+                bar_color = "yellow"
+            else:
+                bar_char = "▄"
+                bar_color = "green"
+
+            bar = bar_char * bar_width
+            power_mw = f"{power:.1f}mW"
+            line = f"{app_name[:20]:20s} {bar:35s} {power_mw:>8s}\n"
+            content.append(line, style=bar_color if i == 0 else "")
+
+        return Panel(content, title="Top Energy Consumers (Current Power)", expand=False)
 
     def _build_time_window_table(self, window_name: str) -> Table:
         """Build table for a specific time window.
@@ -221,12 +294,13 @@ class LiveDashboard:
         window_indicator = f"[{self.current_table_index + 1}/{len(self.window_names)}] {self.window_names[self.current_table_index]}"
         sample_indicator = f"Sample: {self.sample_count}"
         timestamp = self.last_update_time.strftime("%H:%M:%S") if self.sample_count > 0 else "waiting..."
+        battery_indicator = self._build_battery_indicator()
 
-        status = f"{window_indicator}  |  {sample_indicator}  |  Last update: {timestamp}"
-        return Text(status, style="dim white")
+        status = f"{window_indicator}  |  {sample_indicator}  |  {battery_indicator}  |  Updated: {timestamp}"
+        return Text(status, style="bold cyan")
 
-    def _get_visible_windows(self) -> List[str]:
-        """Get list of windows to display based on terminal size.
+    def _get_visible_windows(self) -> list:
+        """Get list of visible time windows based on terminal size.
 
         Returns:
             List of window names to show
